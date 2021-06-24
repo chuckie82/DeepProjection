@@ -20,9 +20,10 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: 3.8
+    - name: Install openmpi-dev
+      run: sudo apt-get install libopenmpi-dev
     - name: Install dependencies
       run: |
-        apt install libopenmpi-dev
         python -m pip install --upgrade pip
         pip install flake8 pytest pytest-cov wheel pypdb skopi
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
