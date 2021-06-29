@@ -1,4 +1,4 @@
-# githubActions
+# DeepProjection
 
 <p align="center">
     <a href="https://github.com/chuckie82/githubActions/">
@@ -16,6 +16,6 @@
 
 </p>
 
-This is home to [githubActions][githubActions].
+This is home to [DeepProjection][DeepProjection].
 
-[githubActions]: https://github.com/chuckie82/githubActions/
+[DeepProjection]: https://github.com/chuckie82/DeepProjection/
