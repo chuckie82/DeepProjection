@@ -35,5 +35,37 @@ class PDBGenerator:
             except:
                 pass
 
+    
+    def download_all_existing_pdb(self):
+        # Downloads all PDB files from the Protein Data Bank
+
+        alpha = ['a','b','c','d','e','f','g','h','i','j','k','l','m',
+                 'n','o','p','q','r','s','t','u','v','w','x','y','z']
+        num = ['0','1','2','3','4','5','6','7','8','9']
+        
+        # Idea behind having the number go before the letters
+        # is to have 0000 be the starting ID, and go on from there.
+        numalpha = num + alpha
+        
+        list_of_valid_ids = []
+        currentID = '0000'
+
+        # Time to generate the codes
+        # The first position is always a number from 0 - 9
+        for first_position in range (10):
+
+            # The second position and all consecutive positions are a mix of letters and numbers
+            for second_position in range(36):
+                for third_position in range(36):
+                    for forth_position in range(36):
+                        currentID = numalpha[first_position] + numalpha[second_position] + numalpha[third_position] + numalpha[forth_position]
+                        print(currentID)
+                        list_of_valid_ids.append(currentID)
+
+        # For debug
+        print(len(list_of_valid_ids))
+
+        return 0
+
 
 
