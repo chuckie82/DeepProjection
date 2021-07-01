@@ -1,5 +1,6 @@
 # SAXS simulation:
 import os
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import skopi as sk
@@ -36,7 +37,7 @@ class PDBGenerator:
                 pass
 
     
-    def download_pdb_in_range(self, lower, upper, dir):
+    def download_pdb_in_range(self, lower, upper=None, dir=None):
         """
         Downloads all PDB files from the Protein Data Bank within the
         range of [lower, upper]
@@ -46,15 +47,19 @@ class PDBGenerator:
         lower : str
             A PDB ID that will be the lower bound of our search.
             The lower range input will be considered a "wildcard" if the string contains
-            an '*' after a value (e.g. 1A*) or the PDB ID is incomplete (e.g. 1A)
+            an '*' after a value (e.g. 1A*) or the PDB ID is incomplete (e.g. 1A).
         
         upper : str
             A PDB ID that will be the upper bound of our search.
             The upper range input will be considered a "wildcard" if the string contains
-            an '*' after a value (e.g. 1A*) or the PDB ID is incomplete (e.g. 1A)
+            an '*' after a value (e.g. 1A*) or the PDB ID is incomplete (e.g. 1A).
+
+            If upper == None, then range is from [lower, 9ZZZ].
 
         dir : str
             The directory to store the PDB files in.
+
+            If dir == None, then download PDB files to current working directory.
 
         Corner Cases
         ------------
@@ -84,47 +89,68 @@ class PDBGenerator:
         # ID, 0001 would be the second, and so on
         numalpha = num + alpha
 
+
+        ### Checking for Default Values; specifically if upper == None or dir == None.
+        if dir == None:
+            # Have PDB files be downloaded to current working directory.
+
+            # Set dir to the directory of the Python script that originally invoked the Python interpreter.
+            # Issue to keep in mind is that sys.path[0] is an empty string when interpreter is invoked interactively
+            # or the script is read from standard input.
+            dir = sys.path[0]
+        else:
+            pass
+
+        if upper == None:
+            # Set upper to '9zzz', so that range is [lower, '9zzz']
+            upper = '9zzz'
+        else:
+            pass
+
         
+
+        ### Check to see if lower, upper, and dir are string
         
-        # Checking for Input Errors
-        if isinstance(dir, str) == False:
-            return False
-        elif (isinstance(lower, str) == False) or (isinstance(upper, str) == False):    # Input Error 1: lower and upper are not str.
+        # Checking lower and upper
+        if (isinstance(lower, str) == False) or (isinstance(upper, str) == False):    # Input Error 1: lower and upper are not str.
             return False
         else:
             # Input Error 5: lower and upper contain upper case letters; just convert lower and upper to lower case.
             lower = lower.lower()
             upper = upper.lower()
 
-
-        if (lower > upper) and (lower != '*') and (upper != '*'):   # Input Error 2: lower > upper (MAY BE SOURCE OF BUGS)
-            return False
-        elif (lower[0] in alpha) or (upper[0] in alpha):            # Input Error 3: The first character in either lower or upper is a letter
-            return False
-        elif (len(lower) > 4) or (len(upper) > 4):                  # Input Error 4: len(lower) or len(upper) is greater than 4; not proper PDB ID format
+        # Checking dir is a string
+        if isinstance(dir, str) == False:
             return False
         else:
             pass
-        
 
-        
+
+        ### lower, upper, and dir are confirmed strings.
+
+
+        ### Input Error 4: len(lower) or len(upper) is greater than 4; not proper PDB ID format
+        if (len(lower) > 4) or (len(upper) > 4):                  
+            return False
+        else:
+            pass
+
+
+        ### Time to preprocess them for wildcards before continuing with more input error checks.
+
         # Checking for Special Ranges
         # If lower == upper, our loop code should be able to handle that case on its own.
-
         if lower == '*' and upper == '*': # Special Range 2: lower == '*' and upper == '*', so we will download all files
-            lower = '0000'
+            lower = '1000'
             upper = '9zzz'
         elif upper == '*':                # Special Range 3: lower is a valid ID, but upper == '*'
             upper = '9zzz'
         elif lower == '*':                # Special Range 4: lower == '*', but upper is a valid ID
-            lower = '0000'
+            lower = '1000'
         else:
             pass
 
-        
-        
-        # Now that the inputs were checked for Input Errors and Special Ranges,
-        # we can preprocess the inputs for wildcards
+        # Preprocess inputs for wildcards
         if '*' in lower:
             # If lower contains a '*', that means a wildcard is present.
             # Find the '*', and fill in the remaining characters with '0'
@@ -154,9 +180,20 @@ class PDBGenerator:
             # If len(upper) < 4, ID contains a wildcard through incompletion.
             # Because length is less than 4, we will add the remaining characters as '0'.
             upper = upper + (numalpha[0] * (4 - len(upper)))
+
+
+        ### Continue with Input Error checks
+        if (lower > upper) and (lower != '*') and (upper != '*'):   # Input Error 2: lower > upper (MAY BE SOURCE OF BUGS)
+            return False
+        elif (lower[0] in alpha) or (upper[0] in alpha):            # Input Error 3: The first character in either lower or upper is a letter
+            return False
+        elif (lower[0] == num[0]) or (upper[0] == num[0]):          # Input Error: The first character is '0'; not proper PDB format
+            return False
+        else:
+            pass
         
-        
-        # Inputs have be preprocessed. Time to get the PDB files
+
+        ### Inputs have been preprocessed. Time to get the PDB files
         lower_firstpos = numalpha.index(lower[0])
         lower_secondpos = numalpha.index(lower[1])
         lower_thirdpos = numalpha.index(lower[2])
@@ -164,7 +201,7 @@ class PDBGenerator:
 
         currentID = ''
 
-        for firstpos in range (lower_firstpos, 10): # Have to add the +1 to the range input, as we want upper to be included in search
+        for firstpos in range (lower_firstpos, 10):
             
             if currentID > upper:
                 # currentID is greater than upper, stop loop
@@ -190,22 +227,21 @@ class PDBGenerator:
                             # currentID is greater than upper, stop loop
                             break  
                         else:
-
                             # Try to find the PDB file with ID of currentID and write to disk
                             try:
-                                print("download_pdb_in_range trying:", currentID)
-                                
+
                                 pdb = pypdb.get_pdb_file(currentID, filetype='pdb', compression=False)
                                 
                                 with open(os.path.join(dir, currentID + ".pdb") ,"w") as f:
                                     f.writelines(pdb)
 
-                                print("downloaded: ", currentID)
                             except:
                                 pass
 
+
         # Return True to state that operation was a success
+        # However, the function returning True does not mean
+        # that it has downloaded a file successfully. It just
+        # means that it ran without issues.
         return True
-
-
 

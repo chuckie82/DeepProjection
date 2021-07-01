@@ -10,3 +10,5 @@ dist/DeepProjection-0.0.1-py3.8.egg
 DeepProjection/testMain.py
 DeepProjection/tests/TestDownloadPDBRangeSanitation.py
 DeepProjection/tests/TestDownloadInRange.py
+DeepProjection/Eric Tests/TestDownloadInRange.py
+DeepProjection/Eric Tests/TestDownloadPDBRangeSanitation.py
