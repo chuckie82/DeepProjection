@@ -1,17 +1,20 @@
 """
 
-Example of visualizing a small network of
-10 PDB files, which are structurally similar,
-using visdcc and Dash.
+This script creates a Dash app that displays a visdcc network that
+displays the relationship of structure similarity between more than one
+PDB structure.
 
 """
-import requests     # To make REST API calls to Protein Data Bank API
-import json         # To interact with JSON response from Protein Data Bank
+import requests     # To make REST API calls to Protein Data Bank API.
+import json         # To interact with JSON response from Protein Data Bank.
+import uuid         # To make unique IDs for edges in case there are repeated edges.
 
 import dash
 import visdcc
 import pandas as pd
 import dash_html_components as html
+
+import timeit         # For timing data processing step.
 
 def get_similar_pdbs_process_json(json_dic):
 
@@ -113,40 +116,35 @@ def load_to_dataframe(similar_pdbs):
     """
     Returns a Panda DataFrame that will be used to create nodes and edges.
 
-    If similar_pdbs is empty, it will return None
+    If similar_pdbs is empty or None, function will return None
 
     Parameters
     ----------
-        similar_pdbs: list(tuple(PDB ID, Structure Similarity Score))
-            A list of tuples, with representation (PDB ID, Structure Similarity Score), which
-            represent a PDB structure that is structurally similar to the PDB at similar_pdbs[0]
+        similar_pdbs: list of tuples with the following structure -> (PDB ID searched: str, similar PDBS for searched ID: list(tuple(ID, Similarity Score)))
+            A list of tuples, with the above representation.
 
     """
-    # If similar_pdbs is empty, return None
-    if len(similar_pdbs) == 0:
+    # If similar_pdbs is empty or None, return None
+    if similar_pdbs == None:
         return None
+    elif len(similar_pdbs) == 0:
+        return None
+    else:
+        pass
     
     # Initialize DataFrame
     df = pd.DataFrame(data=None, index=None, columns=['Source', 'Target', 'Weight'], copy=None)
 
-    # First tuple in similar_pdbs contains the PDB ID of the structure that we were
-    # looking for similar structures for.
-    source = similar_pdbs[0]
-
-    # Creates our nodes and our edge pairs.
-    # Edges go from the 'Source' node (which is similar_pdbs[0]) to the 'Target' node.
-    # The edges are weighted, with values equal to the similarity score.
-    for target in similar_pdbs:
+    for tup in similar_pdbs:
+        source_id = tup[0]         # The PDB ID that was use in the search is consider the source
         
-        if (target == source):
-            # We don't want to have a circular edge.
-            continue
-        else:
-            source_id = source[0]
+        # The list of PDBs associated with the search are consider the targets
+        list_of_pdbs = tup[1]
+        for target in list_of_pdbs:
             target_id = target[0]
-            similarity_score = target[1]
+            target_sim_score = target[1]
 
-            new_row = {'Source': source_id, 'Target': target_id, 'Weight': similarity_score}
+            new_row = {'Source': source_id, 'Target': target_id, 'Weight': target_sim_score}
             df = df.append(new_row, ignore_index=True)
 
     return df
@@ -200,7 +198,7 @@ def create_edges(df):
         source, target, score = row['Source'], row['Target'], row['Weight']
         
         edge = {
-            'id': source + '__' + target,
+            'id': str(uuid.uuid4()),
             'from': source,
             'to': target,
             'width': 1
@@ -211,26 +209,124 @@ def create_edges(df):
     return edges
 
 
+
+def structure_similarity_search(starter_id, mode='strict_shape_match', max_search_depth=1):
+    """
+    Using a "starter" PDB ID, an in-depth structure similarity search is conducted up until the
+    limit set by max_search_depth.
+
+    Parameters
+    ----------
+    starter_id: str
+        A PDB ID that is used to start the search.
+
+    mode: str
+        Mode to use when searching for similar structures.
+        Valid modes: 'strict_shape_match', 'relaxed_shape_match'
+
+    max_search_depth: int
+        The maximum number of "searches" that can be done. One search means iterating
+        through an entire list of PDBs.
+    
+    Return
+    ------
+    A list of tuples with the following structure: (PDB ID searched, list of similar PDBS of searched ID)
+    If max_search_depth is not an int or it is less than 0, it will return None.
+    """
+
+    # Input Checks, specifically for max_num and max_search_depth as they will be used in our loops
+    if isinstance(max_search_depth, int) == False:
+        return None
+    elif max_search_depth < 0:
+        return None
+    else:
+        pass
+
+
+    # Results matrix is a 2-D array that will be used for deep searches.
+    # n x 1 matrix, so each row contains one item.
+    results_matrix = []
+
+    # Loop to do the in-depth search.
+    for i in range(0, max_search_depth):
+        
+        if (len(results_matrix) == 0):
+            # Do an initial search
+            search_id = starter_id
+            
+            similar_structures = get_similar_pdbs(search_id, mode=mode)
+            similar_structures.pop(0)   # First item in the list is the pdb represented by "id = current_id"
+            
+            tup = (search_id, similar_structures)
+            
+            results_matrix.append([tup])
+        else:
+            list_to_go_through = results_matrix[i - 1]
+            list_to_add = []
+
+            # In this for-loop, we use the fact that each list in the matrix is a tuple of (PDB ID, Similar Structures)
+            for item in list_to_go_through:
+                for tup in item[1]:
+                    search_id = tup[0]
+                    
+                    similar_structures = get_similar_pdbs(search_id, mode=mode)
+                    similar_structures.pop(0)   # First item in the list is the pdb represented by "id = current_id"
+
+                    tup = (search_id, similar_structures)
+
+                    list_to_add.append(tup)
+
+            results_matrix.append(list_to_add)
+
+    
+    # Final result matrix.
+    results = []
+
+    for row in results_matrix:
+        for col in results_matrix:
+            for tup in col:
+                results.append(tup)
+    
+    return results
+
+
 def main():
 
-    # Example Constants
-    pdbID = '5S5Y' # PDB ID to search for similar PDBs
+    # Parameters
+    pdbID = '5S5Y'                          # PDB ID to search for similar PDBs
+    search_mode = 'strict_shape_match'      # Mode used in structure similarity search; either 'strict_shape_match' or 'relaxed_shape_match'
+    search_depth = 2                        # How many layers of "search" to conduct.
 
     # Step 1: Create the Dash app that will be used to display our network
     app = dash.Dash()
 
-    # Step 2: Retrieve 10 (or more) PDB files that are structurally similar to "pdbID".
-    # The function returns a list of tuples
-    similar_pdbs = get_similar_pdbs(pdbID)
+    ###### Start our timer
+    start_time = timeit.default_timer()
+    print('Started timing')
+
+
+    # Step 2: Retrieve structure similarity data used for graph.
+    similar_pdbs = structure_similarity_search(pdbID, mode=search_mode, max_search_depth=search_depth)
     
     # Step 3: Load the data into a pandas data frame to make it easier to create nodes and edges.
     df = load_to_dataframe(similar_pdbs)
     
     # Step 4: Create nodes.
     nodes = create_nodes(df)
+
+    ##### For debug, print number of nodes in graph
+    print('Number of nodes = ' + str(len(nodes)))
     
     # Step 5: Create edges.
     edges = create_edges(df)
+
+
+
+    ###### Stop our timer and print out time elapsed.
+    stop_time = timeit.default_timer()
+    print('Time Elapsed in Data Processing: ' + (str(stop_time - start_time)))
+
+
     
     # Step 6: Create visdcc Network and add it to a Dash layout.
     if nodes != None and edges != None:
@@ -238,7 +334,10 @@ def main():
                                 data = {'nodes': nodes, 'edges': edges},
                                 options = {
                                     'height': '600px',
-                                    'width': '100%'
+                                    'width': '100%',
+                                    'physics': {
+                                        'enabled': False
+                                    }
                                 })
 
         app.layout = html.Div([network])
