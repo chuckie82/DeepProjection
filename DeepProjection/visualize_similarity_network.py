@@ -11,114 +11,16 @@ import pandas as pd
 import networkx as nx
 from pyvis.network import Network
 
-# Helper function for query_structure_similarity_pdbs()
-def query_structure_similarity_pdbs_json_processor(json_dic):
+""" HELPER FUNCTIONS """
 
-    """
-    A helper function for get_similar_pdbs().
-    Processes the raw JSON from an HTTP response by
-    extracting the PDB IDs and similarity scores, putting
-    them in tuples, and appending them to a list.
-
-    Parameters
-    ----------
-    json_dic: dictionary
-        A dictionary that represents a JSON.
-
-    Things to get from JSON:
-        1. "result_set" - Array containing the search results.
-            -> In this array, we want "identifier" to get PDB ID and "original_score" to get similarity score.
-    """
-    
-    # Get "result_set" array
-    # This is an array of dictionaries for each PDB
-    results = json_dic['result_set']
-
-    # Array filled with tuples of (PDB ID, Structure Similarity Score)
-    ids_and_scores = []
-
-    # Fill ids_and_scores with the tuples (PDB ID, Structure Similarity Score)
-    for pdb in results:
-        ID = pdb['identifier']
-        score = pdb['services'][0]['nodes'][0]['original_score']
-
-        ids_and_scores.append((ID, score))
-
-    return ids_and_scores
-
-# PDB search function that gets PDB ID and structure similarity score for pdb_id_to_query
-def query_structure_similarity_pdbs(pdb_id_to_query, mode='strict_shape_match', return_all=True):
-
-    """
-    Returns a list of tuples, each containing a PDB ID and structure similarity score
-    of PDB structures that are similar to the PDB whose ID was queried.
-
-    Tuples in list are structured as: (PDB ID, Structure Similarity Score)
-
-    Parameters
-    ----------
-    pdb_id_to_query: str
-        PDB ID of structure to find similar structures.
-    
-    mode: str
-        Mode to use when searching for similar structures.
-        Valid modes: 'strict_shape_match', 'relaxed_shape_match'
-
-    return_all: bool
-        If true, returns all results from Protein Data Bank.
-        If false, returns a few of the top results from Protein Data Bank.
-    
-    Return
-    ------
-    Returns a list of tuples, each containing a PDB ID and structure similarity score
-    of PDB structures that are similar to the PDB whose ID was queried.
-
-    If PDB ID queried does not exist, the function will return None
-    
-    Input Checks
-    ------------
-    Naturally, there would be some code to check to see if the inputs of the
-    function are valid. In this case, input checks may be unnecessary as bad
-    inputs would result in an Error Code from the HTTP response.
-    """
-
-    # REST API endpoint
-    url = 'https://search.rcsb.org/rcsbsearch/v1/query?json='
-
-    # Dictionary representation of the JSON query
-    query = {
-        "query": {
-            "type": "terminal",
-            "service": "structure",
-            "parameters": {
-	            "operator": mode,
-                "value": {
-                    "entry_id": pdb_id_to_query,
-                    "assembly_id": "1"
-                }
-            }
-        },
-        "request_options": {
-            "return_all_hits": return_all
-        },
-        "return_type": "entry"
-    }
-
-    # Convert dictionary to a JSON string
-    query_json = json.dumps(query)
-
-    # Make the response request
-    response = requests.get(url=(url + query_json))
-
-    # If we get a code 200 (OK), return the array of tuples.
-    if (response.ok) and (response.status_code == 200):
-        return query_structure_similarity_pdbs_json_processor(response.json())
-    else:
-        return None
-
+# Loads structure similarity data into a pandas DataFrame
 def load_to_dataframe(similar_pdbs):
     """
     Returns a Panda DataFrame containing node and edge data.
+    The DataFrame consists of three columns: "Source," "Target," and "Weight"
+        - The "Source" and "Target" columns contains nodes to connect with an edge.
+        - The "Weight" column contains the edge weight, which, in this case, is the structure similarity score
+          between the "Source" and "Target" nodes.
 
     If similar_pdbs is empty or None, function will return None
 
@@ -153,89 +55,8 @@ def load_to_dataframe(similar_pdbs):
 
     return df
 
-# Uses a PDB ID as a "seed" to get structure similarity data
-def get_structure_similarity_data_by_seed(seed_id, mode='strict_shape_match', max_search_depth=1):
-    """
-    Using a seed PDB ID, an in-depth structure similarity search is conducted up until the
-    limit set by max_search_depth.
-
-    Parameters
-    ----------
-    seed_id: str
-        A PDB ID that is used to start the search.
-
-    mode: str
-        Mode to use when searching for similar structures.
-        Valid modes: 'strict_shape_match', 'relaxed_shape_match'
-
-    max_search_depth: int
-        The maximum number of "searches" that can be done. One search means iterating
-        through an entire list of PDBs.
-    
-    Return
-    ------
-    A list of tuples with the following structure: (PDB ID searched, list of similar PDBS of searched ID)
-    If max_search_depth is not an int or it is less than 0, it will return None.
-    """
-
-    # Input Checks, specifically for max_num and max_search_depth as they will be used in our loops
-    if isinstance(max_search_depth, int) == False:
-        return None
-    elif max_search_depth < 0:
-        return None
-    else:
-        pass
-
-
-    # Results matrix is a 2-D array that will be used for deep searches.
-    # n x 1 matrix, so each row contains one item.
-    results_matrix = []
-
-    # Loop to do the in-depth search.
-    for i in range(0, max_search_depth):
-        
-        if (len(results_matrix) == 0):
-            # Do an initial search
-            search_id = seed_id
-            
-            similar_structures = query_structure_similarity_pdbs(search_id, mode=mode)
-            similar_structures.pop(0)   # First item in the list is the pdb represented by "id = current_id"
-            
-            tup = (search_id, similar_structures)
-            
-            results_matrix.append([tup])
-        else:
-            list_to_go_through = results_matrix[i - 1]
-            list_to_add = []
-
-            # In this for-loop, we use the fact that each list in the matrix is a tuple of (PDB ID, Similar Structures)
-            for item in list_to_go_through:
-                for tup in item[1]:
-                    search_id = tup[0]
-                    
-                    similar_structures = query_structure_similarity_pdbs(search_id, mode=mode)
-                    similar_structures.pop(0)   # First item in the list is the pdb represented by "id = current_id"
-
-                    tup = (search_id, similar_structures)
-
-                    list_to_add.append(tup)
-
-            results_matrix.append(list_to_add)
-
-    
-    # Final result matrix.
-    results = []
-
-    for row in results_matrix:
-        for col in results_matrix:
-            for tup in col:
-                results.append(tup)
-    
-    return results
-
-
 # Helper function for get_structure_similarity_data_from_range()
-# Modified method from pdbGenerator.py in PR#1
+# Returns a list of PDB IDs in a given range
 def get_pdb_ids_in_range(lower, upper=None):
     """
     Returns a list of strings representing PDB IDs in the range of [lower, upper]
@@ -253,23 +74,6 @@ def get_pdb_ids_in_range(lower, upper=None):
         The upper range input will be considered a "wildcard" if the string contains
         an '*' after a value (e.g. 1A*) or the PDB ID is incomplete (e.g. 1A).
         If upper == None, then range is from [lower, 9ZZZ].
-    
-    Corner Cases
-    ------------
-    Input Errors
-    1. lower or upper are not of type str
-    2. lower > upper; that is, lower comes after upper (e.g. BBBB to AAAA).
-    3. The first character in the string for either lower or upper is a letter; not proper PDB ID format.
-    4. len(lower) or len(upper) is greater than 4; not proper PDB ID format
-    5. lower and upper contain upper case letters; just convert lower and upper to lower case.
-    6. Keep in Mind: wildcard symbol or a space is found in between two sets of letters (e.g. 1A*B, *BBB, " AA" or "AD C")
-    
-    Special Ranges
-    1. lower == upper; in this case, the function will attempt to download 1 file.
-    2. lower == '*' and upper == '*'; in this case, we will download all files.
-    3. lower is a valid ID, but upper == '*'; in this case, we will download all files between lower and upper == '9ZZZ'
-    4. lower == '*', but upper is a valid ID; in this case, we will download all files between lower == '0000' and upper
-    
     """
         
     alpha = ['a','b','c','d','e','f','g','h','i','j','k','l','m',
@@ -412,6 +216,190 @@ def get_pdb_ids_in_range(lower, upper=None):
     # Return the list of IDs
     return created_ids
 
+# Helper function for query_structure_similarity_pdbs()
+def query_structure_similarity_pdbs_json_processor(json_dic):
+
+    """
+    A helper function for get_similar_pdbs().
+    Processes the raw JSON from an HTTP response by
+    extracting the PDB IDs and similarity scores, putting
+    them in tuples, and appending them to a list.
+
+    Parameters
+    ----------
+    json_dic: dictionary
+        A dictionary that represents a JSON.
+
+    ----------
+    Things to get from JSON:
+        1. "result_set" - Array containing the search results.
+            -> In this array, we want "identifier" to get PDB ID and "original_score" to get similarity score.
+    """
+    
+    # Get "result_set" array
+    # This is an array of dictionaries for each PDB
+    results = json_dic['result_set']
+
+    # Array filled with tuples of (PDB ID, Structure Similarity Score)
+    ids_and_scores = []
+
+    # Fill ids_and_scores with the tuples (PDB ID, Structure Similarity Score)
+    for pdb in results:
+        ID = pdb['identifier']
+        score = pdb['services'][0]['nodes'][0]['original_score']
+
+        ids_and_scores.append((ID, score))
+
+    return ids_and_scores
+
+# Creates a JSON query to Protein Data Bank to get structure similarity data.
+def query_structure_similarity_pdbs(pdb_id_to_query, mode='strict_shape_match', return_all=True):
+
+    """
+    Returns a list of tuples, each containing a PDB ID and structure similarity score
+    of PDB structures that are similar to the PDB whose ID was queried.
+
+    Tuples in list are structured as: (PDB ID, Structure Similarity Score)
+
+    Parameters
+    ----------
+    pdb_id_to_query: str
+        PDB ID of structure to find similar structures.
+    
+    mode: str
+        Mode to use when searching for similar structures.
+        Valid modes: 'strict_shape_match', 'relaxed_shape_match'
+
+    return_all: bool
+        If true, returns all results from Protein Data Bank.
+        If false, returns a few of the top results from Protein Data Bank.
+    
+    Return
+    ------
+    Returns a list of tuples, each containing a PDB ID and structure similarity score
+    of PDB structures that are similar to the PDB whose ID was queried.
+
+    If PDB ID queried does not exist, the function will return None
+    
+    """
+
+    # REST API endpoint
+    url = 'https://search.rcsb.org/rcsbsearch/v1/query?json='
+
+    # Dictionary representation of the JSON query
+    query = {
+        "query": {
+            "type": "terminal",
+            "service": "structure",
+            "parameters": {
+	            "operator": mode,
+                "value": {
+                    "entry_id": pdb_id_to_query,
+                    "assembly_id": "1"
+                }
+            }
+        },
+        "request_options": {
+            "return_all_hits": return_all
+        },
+        "return_type": "entry"
+    }
+
+    # Convert dictionary to a JSON string
+    query_json = json.dumps(query)
+
+    # Make the response request
+    response = requests.get(url=(url + query_json))
+
+    # If we get a code 200 (OK), return the array of tuples.
+    if (response.ok) and (response.status_code == 200):
+        return query_structure_similarity_pdbs_json_processor(response.json())
+    else:
+        return None
+
+
+""" SEARCH FUNCTIONS """
+
+# Uses a PDB ID as a "seed" to get structure similarity data
+def get_structure_similarity_data_by_seed(seed_id, mode='strict_shape_match', max_search_depth=1):
+    """
+    Using a seed PDB ID, an in-depth structure similarity search is conducted up until the
+    limit set by max_search_depth.
+
+    Parameters
+    ----------
+    seed_id: str
+        A PDB ID that is used to start the search.
+
+    mode: str
+        Mode to use when searching for similar structures.
+        Valid modes: 'strict_shape_match', 'relaxed_shape_match'
+
+    max_search_depth: int
+        The maximum number of "searches" that can be done. One search means iterating
+        through an entire list of PDBs.
+    
+    Return
+    ------
+    A list of tuples with the following structure: (PDB ID searched, list of similar PDBS of searched ID)
+    If max_search_depth is not an int or it is less than 0, it will return None.
+    """
+
+    # Input Checks, specifically for max_num and max_search_depth as they will be used in our loops
+    if isinstance(max_search_depth, int) == False:
+        return None
+    elif max_search_depth < 0:
+        return None
+    else:
+        pass
+
+
+    # Results matrix is a 2-D array that will be used for deep searches.
+    # n x 1 matrix, so each row contains one item.
+    results_matrix = []
+
+    # Loop to do the in-depth search.
+    for i in range(0, max_search_depth):
+        
+        if (len(results_matrix) == 0):
+            # Do an initial search
+            search_id = seed_id
+            
+            similar_structures = query_structure_similarity_pdbs(search_id, mode=mode)
+            similar_structures.pop(0)   # First item in the list is the pdb represented by "id = current_id"
+            
+            tup = (search_id, similar_structures)
+            
+            results_matrix.append([tup])
+        else:
+            list_to_go_through = results_matrix[i - 1]
+            list_to_add = []
+
+            # In this for-loop, we use the fact that each list in the matrix is a tuple of (PDB ID, Similar Structures)
+            for item in list_to_go_through:
+                for tup in item[1]:
+                    search_id = tup[0]
+                    
+                    similar_structures = query_structure_similarity_pdbs(search_id, mode=mode)
+                    similar_structures.pop(0)   # First item in the list is the pdb represented by "id = current_id"
+
+                    tup = (search_id, similar_structures)
+
+                    list_to_add.append(tup)
+
+            results_matrix.append(list_to_add)
+
+    
+    # Final result matrix.
+    results = []
+
+    for row in results_matrix:
+        for col in results_matrix:
+            for tup in col:
+                results.append(tup)
+    
+    return results
+
 # Uses a range of PDBs to get structure similarity data
 def get_structure_similarity_data_from_range(lower, upper=None, mode='strict_shape_match', num_neighbors=10):
     
@@ -454,22 +442,14 @@ def get_structure_similarity_data_from_range(lower, upper=None, mode='strict_sha
 
     for id in possible_pdb_ids:
 
-        # For debug
-        print('Querying: ' + id)
 
         data = query_structure_similarity_pdbs(id, mode=mode)
 
         # Check that we got data
         if data == None:
-            
-            # For debug
-            print(id + ' contains no data')
-            
             continue
         else:
-            
-            # For debug
-            print(id + ' contains data')
+            pass
 
 
         # Trim data array based on num_neighbors
@@ -488,18 +468,21 @@ def get_structure_similarity_data_from_range(lower, upper=None, mode='strict_sha
     return results
 
 
+""" MAIN FUNCTION """
+
 def main():
 
     # Parameters
-    lower = '1A00'
+    lower = '1A00'                          # Range parameters: [lower, upper]
     upper = '1A10'
     search_mode = 'strict_shape_match'      # Mode used in structure similarity search; either 'strict_shape_match' or 'relaxed_shape_match'
-    num_neighbors = 10
+    num_neighbors = 10                      # Maximum number of similar PDB structures to include in graph.
+    directory = ''                          # Directory to store HTML file with pyvis graph.
 
     # Step 1: Retrieve structure similarity data used for graph.
     similar_pdbs = get_structure_similarity_data_from_range(lower=lower, upper=upper, mode=search_mode, num_neighbors=num_neighbors)
     
-    # Step 2: Load the data into a pandas data frame to make it easier to create nodes and edges.
+    # Step 2: Load the data into a pandas DataFrame to create network.
     df = load_to_dataframe(similar_pdbs)
 
     # Step 3: Load the DataFrame data into a NetworkX graph.
@@ -521,13 +504,7 @@ def main():
     net.options.physics.use_barnes_hut(physics_params)
     
     # Step 5: Display network
-    net.show('Pyvis_test.html')
-
-    # For debug
-    print()
-    print('Number of nodes: ' + str(len(net.nodes)))
-    print('Number of edges: ' + str(len(net.edges)))
-   
+    net.show(directory + 'Pyvis_test.html')
 
 if __name__ == "__main__":
     main()
