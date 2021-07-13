@@ -487,21 +487,12 @@ def main():
 
     # Step 3: Load the DataFrame data into a NetworkX graph.
     graph = nx.from_pandas_edgelist(df, source='Source', target='Target', edge_attr='Weight')
+    
+    nx.spring_layout(graph)     # Implemented a spring_layout to NetworkX graph to prevent node overlaps.
 
     # Step 4: Load the NetworkX graph into pyvis
     net = Network(height='1000px', width='1000px')
     net.from_nx(graph)
-
-    physics_params = {
-        'gravity': 0,
-        'central_gravity': 0,
-        'spring_length': 0,
-        'spring_strength': 0,
-        'damping': 0,
-        'overlap': 10
-    }
-
-    net.options.physics.use_barnes_hut(physics_params)
     
     # Step 5: Display network
     net.show(directory + 'Pyvis_test.html')
