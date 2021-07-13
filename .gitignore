@@ -1,11 +1,3 @@
-
-dist/DeepProjection-0.0.1-py3.8.egg
-DeepProjection/Eric Tests/TestDownloadInRange.py
-DeepProjection.egg-info/top_level.txt
-DeepProjection/Eric Tests/TestDownloadPDBRangeSanitation.py
-DeepProjection.egg-info/SOURCES.txt
-DeepProjection.egg-info/requires.txt
-DeepProjection.egg-info/PKG-INFO
-DeepProjection.egg-info/not-zip-safe
-DeepProjection.egg-info/dependency_links.txt
 .vscode/launch.json
+DeepProjection.egg-info/
+dist/DeepProjection-0.0.1-py3.8.egg
