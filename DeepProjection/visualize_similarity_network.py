@@ -8,6 +8,7 @@ import requests     # To make REST API calls to Protein Data Bank API.
 import json         # To interact with JSON response from Protein Data Bank.
 
 import pandas as pd
+import matplotlib.pyplot as plt     # Used to plot node positions returned by NetworkX spring_layout
 import networkx as nx
 from pyvis.network import Network
 
@@ -468,6 +469,39 @@ def get_structure_similarity_data_from_range(lower, upper=None, mode='strict_sha
     return results
 
 
+""" Node Position Data Functions """
+def get_node_positions_df(node_pos):
+    """
+    Given a dictionary of node_pos, returns a Pandas DataFrame containing the
+    Node label, and the (x,y) position on the graph.
+
+    Parameters
+    ----------
+    node_pos: dictionary
+        A dictionary whose key is the PDB ID, and each key contains an array with two elements.
+        Ex.
+        {
+            'PDB ID': array([x, y]),
+            ...
+        }
+    """
+    # DataFrame to return
+    dataframe = pd.DataFrame(columns=['id', 'x', 'y'])
+
+    # Get items in dictionary
+    nodes = node_pos.items()
+
+    for node in nodes:
+        key = node[0]
+        x = node[1][0]
+        y = node[1][1]
+
+        new_row = {'id': key, 'x': x, 'y': y}
+        dataframe = dataframe.append(new_row, ignore_index=True)
+
+    return dataframe
+
+
 """ MAIN FUNCTION """
 
 def main():
@@ -477,7 +511,8 @@ def main():
     upper = '1A10'
     search_mode = 'strict_shape_match'      # Mode used in structure similarity search; either 'strict_shape_match' or 'relaxed_shape_match'
     num_neighbors = 10                      # Maximum number of similar PDB structures to include in graph.
-    directory = ''                          # Directory to store HTML file with pyvis graph.
+    html_directory = ''                     # Directory to store HTML file with pyvis graph.
+    node_pos_directory = ''                 # Directory to store an h5 file containing the position of nodes.
 
     # Step 1: Retrieve structure similarity data used for graph.
     similar_pdbs = get_structure_similarity_data_from_range(lower=lower, upper=upper, mode=search_mode, num_neighbors=num_neighbors)
@@ -488,14 +523,34 @@ def main():
     # Step 3: Load the DataFrame data into a NetworkX graph.
     graph = nx.from_pandas_edgelist(df, source='Source', target='Target', edge_attr='Weight')
     
-    nx.spring_layout(graph)     # Implemented a spring_layout to NetworkX graph to prevent node overlaps.
+    # Step 4: Apply a spring_layout to NetworkX graph to prevent node overlap.
+    node_pos = nx.spring_layout(graph)  # Stores a dictionary of initial node positions for later data analysis.
+    print(node_pos)
 
-    # Step 4: Load the NetworkX graph into pyvis
+    # Step 5: Load the NetworkX graph into pyvis
     net = Network(height='1000px', width='1000px')
     net.from_nx(graph)
     
-    # Step 5: Display network
-    net.show(directory + 'Pyvis_test.html')
+    # Step 6: Display network
+    net.show(html_directory + 'Pyvis_test.html')
+
+    #############################################################################################################
+
+    # We will process the dictionary stored in node_pos into a DataFrame, and save that DataFrame into an h5 file
+    node_pos_df = get_node_positions_df(node_pos)
+    print(node_pos_df)
+
+    # Save node_pos_df to a h5 file for later analysis.
+    node_pos_df.to_hdf(node_pos_directory + 'node_positions.h5', key='positions')
+
+    # Scatter plot of points
+    fig, ax = plt.subplots()
+    ax.scatter(node_pos_df['x'], node_pos_df['y'])
+
+    for i, txt in enumerate(node_pos_df['id']):
+        ax.annotate(txt, (node_pos_df['x'][i], node_pos_df['y'][i]))
+
+    plt.show()
 
 if __name__ == "__main__":
     main()
