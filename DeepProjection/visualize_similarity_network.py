@@ -525,7 +525,6 @@ def main():
     
     # Step 4: Apply a spring_layout to NetworkX graph to prevent node overlap.
     node_pos = nx.spring_layout(graph)  # Stores a dictionary of initial node positions for later data analysis.
-    print(node_pos)
 
     # Step 5: Load the NetworkX graph into pyvis
     net = Network(height='1000px', width='1000px')
@@ -538,7 +537,6 @@ def main():
 
     # We will process the dictionary stored in node_pos into a DataFrame, and save that DataFrame into an h5 file
     node_pos_df = get_node_positions_df(node_pos)
-    print(node_pos_df)
 
     # Save node_pos_df to a h5 file for later analysis.
     node_pos_df.to_hdf(node_pos_directory + 'node_positions.h5', key='positions')
