@@ -4,8 +4,8 @@ from io import open
 requirements = [
     'numpy',
     'pytest',
-    'setuptools'
-    'pypdb'
+    'setuptools',
+    'pypdb',
     'skopi'
 ]
 
