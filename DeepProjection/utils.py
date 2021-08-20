@@ -81,7 +81,7 @@ def check_img_for_nan(img):
     False, if img does not have a 'nan'.
     """
 
-    if np.nan in img:
+    if np.isnan(img).any():
         return True
     else:
         return False
