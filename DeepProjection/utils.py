@@ -1,7 +1,10 @@
 import sys
 import numpy as np
 import skopi as sk
-from matplotlib import pyplot as plt
+
+import skimage.measure as sm
+from numba import jit
+
 
 ############################################ From calculate_diffraction_image_resolution.ipynb ############################################
 
@@ -55,10 +58,12 @@ def calculate_maximum_diffraction_resolution(beam_file, pdb_file, detector_dimen
 
 ############################################### From check_for_nan_values.ipynb #########################################################
 
+
 # From check_for_nan_values.ipynb
 def equal_float(a, b):
     """ Helper function to see if two floats are equal. """
     return abs(a - b) <= sys.float_info.epsilon
+
 
 # From check_for_nan_values.ipynb
 def check_img_for_nan(img):
@@ -75,12 +80,12 @@ def check_img_for_nan(img):
     True, if img does have a 'nan'.
     False, if img does not have a 'nan'.
     """
-    
-    # img = np.expand_dims(img, axis=2)
+
     if np.nan in img:
         return True
     else:
         return False
+
 
 # From check_for_nan_values.ipynb
 def check_for_blank_img(img):
@@ -97,11 +102,15 @@ def check_for_blank_img(img):
     True, if image is blank.
     False, if image is not blank.
     """
-    
-    if equal_float(np.sum(img), 0):
+
+    # Take absolute of img before taking the sum in order to
+    # prevent corner case of negative and positive values resulting in
+    # a sum of zero.
+    if equal_float(np.sum(np.absolute(img)), 0):
         return True
     else:
         return False
+
 
 # From check_for_nan_values.ipynb
 def check_img_for_right_shape(img, shape_to_check):
@@ -123,7 +132,7 @@ def check_img_for_right_shape(img, shape_to_check):
     
     if img.shape == shape_to_check:
         return True
-    else
+    else:
         return False
             
 ############################################ From modified_thumbnail_generation.ipynb #####################################################
@@ -146,6 +155,7 @@ def upsample(warr, dim, binr, binc):
             upCalib[ix:er,jy:ec] = warr[i,j]
     return upCalib
 
+
 # perform binning here
 def downsample(assem, bin_row=2, bin_col=2, mask=None):
     """ Helper function to img_to_thumbnail() """
@@ -160,7 +170,8 @@ def downsample(assem, bin_row=2, bin_col=2, mask=None):
     warr[ind] = downCalib[ind] / downWeight[ind]
     return warr
 
-def img_to_thumbnail(img, beam_file, pdb_dir, detector_dimensions, thumbnail_shape):
+
+def img_to_thumbnail(img, beam_file, pdb_file, detector_dimensions, n_part_per_shot, thumbnail_shape):
     """
     Generates an image into a thumbnail image.
     
@@ -172,15 +183,17 @@ def img_to_thumbnail(img, beam_file, pdb_dir, detector_dimensions, thumbnail_sha
         Image, with shape of (row, col), to create a thumbnail out of.
     beam_file: str
         Path to beam file used to image img.
-    pdb_dir: str
+    pdb_file: str
         Path to PDB file used to make img.
     detector_dimensions: tuple(int, float, float)
         Tuple representing the dimensions of SimpleSquareDetector used to simulate diffraction images whose
         resolution we are trying to calculate.
         Tuple format is (num pixels for row and col, detector size, detector distance from protein).
+    n_part_per_shot: int
+        Number of particles that were simulated in the image.
     thumbnail_shape: tuple(int, int)
         Tuple representing the dimension of the thumbnail image.
-        Tuple formate is (thumbnail_rows, thumbnail_cols).
+        Tuple format is (thumbnail_rows, thumbnail_cols).
     
     Return
     ------
@@ -195,7 +208,7 @@ def img_to_thumbnail(img, beam_file, pdb_dir, detector_dimensions, thumbnail_sha
     increase_factor = 1000
     
     # Get detector dimension variables.
-    n_pixels, det_size, det_dist = detector_info
+    n_pixels, det_size, det_dist = detector_dimensions
     
     # Set the number of rows and columns for binning.
     # Formula for rows is: bin_rows = img.shape[0] / thumbnail_shape[0], or bin_rows = (rows in img) / (desired thumbnail rows).
@@ -204,12 +217,12 @@ def img_to_thumbnail(img, beam_file, pdb_dir, detector_dimensions, thumbnail_sha
     bin_cols = img.shape[1] / thumbnail_shape[1]
     
     # Setup beam file.
-    beam = sk.Beam(beamfile)
-    beam.set_photons_per_pulse(increase_factor *beam.get_photons_per_pulse())
+    beam = sk.Beam(beam_file)
+    beam.set_photons_per_pulse(increase_factor * beam.get_photons_per_pulse())
 
     # Setup particle file.
     particle = sk.Particle()
-    particle.read_pdb(particlefile, ff='WK')
+    particle.read_pdb(pdb_file, ff='WK')
     
     # Setup detector.
     det = sk.SimpleSquareDetector(int(n_pixels), float(det_size), float(det_dist), beam=beam)
@@ -218,13 +231,13 @@ def img_to_thumbnail(img, beam_file, pdb_dir, detector_dimensions, thumbnail_sha
     exp = sk.SPIExperiment(det, beam, particle, n_part_per_shot)
 
     # Get a pattern from experiment. This is used to create a mask to make thumbnail out of.
-    pattern = exp.generate_image_stack(return_photons=True,return_intensities=False)
+    pattern = exp.generate_image_stack(return_photons=True, return_intensities=False)
     
     # Get mask to be used for making the thumbnail.
     mask = det.assemble_image_stack(np.ones_like(pattern))
     
     # Generate the thumbnail.
-    thumbnail_img = downsample(det.assemble_image_stack(img), bin_row=bin_row, bin_col=bin_col, mask=mask)
+    thumbnail_img = downsample(det.assemble_image_stack(img), bin_row=bin_rows, bin_col=bin_cols, mask=mask)
     
     # Return thumbnail image.
     return thumbnail_img
