@@ -1,4 +1,4 @@
-from DeepProjection.utils import equal_float, check_img_for_nan, check_for_blank_img, check_img_for_right_shape
+from utils import equal_float, check_img_for_nan, check_for_blank_img, check_img_for_right_shape
 import numpy as np
 
 
